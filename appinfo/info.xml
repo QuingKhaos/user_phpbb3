@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<info>
+    <id>user_phpbb3</id>
+    <name>phpBB3 user backend</name>
+    <description>Authenticate users using phpBB3 Database</description>
+    <version>0.1</version>
+    <licence>AGPL</licence>
+    <author>Patrik Karisch &lt;patrik.karisch@abimus.com&gt;</author>
+    <require>4</require>
+    <types>
+        <authentication/>
+    </types>
+</info>
