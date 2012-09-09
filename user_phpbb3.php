@@ -62,9 +62,6 @@ class OC_User_phpbb3 extends OC_User_Backend {
 		}
 
 		$q = 'SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
-		OC_Log::write('OC_User_phpbb3',
-				'Query: ' . $q,
-				OC_Log::DEBUG);
 		$result = $this->db->query($q);
 		$email = $result->fetch_assoc();
 		$email = $email['user_email'];
@@ -83,9 +80,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 		}
 
 		$query = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "' . $this->db->real_escape_string($uid) . '"';
-		$query .= ' AND user_password = "' . $this->md5($this->db->real_escape_string($password)) . '"';OC_Log::write('OC_User_phpbb3',
-				'Query: ' . $query,
-				OC_Log::DEBUG);
+		$query .= ' AND user_password = "' . md5($this->db->real_escape_string($password)) . '"';
 		$result = $this->db->query($query);
 		$row = $result->fetch_assoc();
 
@@ -108,9 +103,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return $users;
 		}
 
-		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users';OC_Log::write('OC_User_phpbb3',
-				'Query: ' . $q,
-				OC_Log::DEBUG);
+		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users';
 		$result = $this->db->query($q);
 		while ($row = $result->fetch_assoc()) {
 			if(!empty($row['username'])) {
@@ -132,9 +125,6 @@ class OC_User_phpbb3 extends OC_User_Backend {
 		}
 
 		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
-		OC_Log::write('OC_User_phpbb3',
-				'Query: ' . $q,
-				OC_Log::DEBUG);
 		$result = $this->db->query($q);
 		return $result->num_rows > 0;
 	}
