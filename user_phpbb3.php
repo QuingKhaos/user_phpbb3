@@ -61,7 +61,11 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return false;
 		}
 
-		$result = $this->db->query('SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"');
+		$q = 'SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
+		OC_Log::write('OC_User_phpbb3',
+				'Query: ' . $q,
+				OC_Log::DEBUG);
+		$result = $this->db->query($q);
 		$email = $result->fetch_assoc();
 		$email = $email['user_email'];
 		OC_Preferences::setValue($uid, 'settings', 'email', $email);
@@ -79,7 +83,9 @@ class OC_User_phpbb3 extends OC_User_Backend {
 		}
 
 		$query = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "' . $this->db->real_escape_string($uid) . '"';
-		$query .= ' AND user_password = "' . $this->phpbb_hash($this->db->real_escape_string($password)) . '"';
+		$query .= ' AND user_password = "' . $this->phpbb_hash($this->db->real_escape_string($password)) . '"';OC_Log::write('OC_User_phpbb3',
+				'Query: ' . $query,
+				OC_Log::DEBUG);
 		$result = $this->db->query($query);
 		$row = $result->fetch_assoc();
 
@@ -102,7 +108,10 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return $users;
 		}
 
-		$result = $this->db->query('SELECT username FROM '. $this->phpbb3_db_prefix .'users');
+		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users';OC_Log::write('OC_User_phpbb3',
+				'Query: ' . $q,
+				OC_Log::DEBUG);
+		$result = $this->db->query($q);
 		while ($row = $result->fetch_assoc()) {
 			if(!empty($row['username'])) {
 				$users[] = $row['username'];
@@ -122,7 +131,11 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return false;
 		}
 
-		$result = $this->db->query('SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"');
+		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
+		OC_Log::write('OC_User_phpbb3',
+				'Query: ' . $q,
+				OC_Log::DEBUG);
+		$result = $this->db->query($q);
 		return $result->num_rows > 0;
 	}
 
