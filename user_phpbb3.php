@@ -61,7 +61,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return false;
 		}
 
-		$q = 'SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
+		$q = 'SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'" AND user_type = 0 OR user_type = 3';
 		$result = $this->db->query($q);
 		$email = $result->fetch_assoc();
 		$email = $email['user_email'];
@@ -80,7 +80,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 		}
 
 		$query = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "' . $this->db->real_escape_string($uid) . '"';
-		$query .= ' AND user_password = "' . md5($this->db->real_escape_string($password)) . '"';
+		$query .= ' AND user_password = "' . md5($this->db->real_escape_string($password)) . '" AND user_type = 0 OR user_type = 3';
 		$result = $this->db->query($query);
 		$row = $result->fetch_assoc();
 
@@ -103,7 +103,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return $users;
 		}
 
-		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users';
+		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE user_type = 0 OR user_type = 3';
 		$result = $this->db->query($q);
 		while ($row = $result->fetch_assoc()) {
 			if(!empty($row['username'])) {
@@ -124,7 +124,7 @@ class OC_User_phpbb3 extends OC_User_Backend {
 			return false;
 		}
 
-		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"';
+		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"  AND user_type = 0 OR user_type = 3';
 		$result = $this->db->query($q);
 		return $result->num_rows > 0;
 	}
