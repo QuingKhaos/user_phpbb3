@@ -20,12 +20,15 @@
  * License along with this library.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
+
+OC_Util::checkAdminUser();
+
 $params = array(
 		'phpbb3_db_host',
 		'phpbb3_db_user',
-		'phpbb3_db_password',
+		'phpbb3_db_pass',
 		'phpbb3_db_name',
-		'phpbb3_db_prefix'
+		'phpbb3_db_prefix',
 );
 
 if ($_POST) {
