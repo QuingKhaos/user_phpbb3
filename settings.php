@@ -29,6 +29,7 @@ $params = array(
 		'phpbb3_db_pass',
 		'phpbb3_db_name',
 		'phpbb3_db_prefix',
+		'phpbb3_assign_group',
 );
 
 if ($_POST) {

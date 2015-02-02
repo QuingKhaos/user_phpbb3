@@ -35,11 +35,12 @@ class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
 	function __construct() {
 		$this->connected = false;
 		$this->config = array(
-			'host'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_host',   ''),
-			'name'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_name',   ''),
-			'user'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_user',   ''),
-			'pass'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_pass',   ''),
-			'prefix' => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_prefix', ''),
+			'host'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_host',      'localhost'),
+			'name'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_name',      'phpbb3'),
+			'user'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_user',      ''),
+			'pass'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_pass',      ''),
+			'prefix' => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_prefix',    'phpbb3_'),
+			'group'  => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_assign_group', 'phpbb3'),
 		);
 
 		try {
@@ -48,8 +49,12 @@ class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
 				$this->config['user'], $this->config['pass']
 			);
 		} catch (PDOException $e) {
-			$this->logError(sprintf('OC_User_phpbb3, Failed to connect to phpbb3 database: %s', $e->getMessage()));
+			$this->logError(sprintf('Failed to connect to phpbb3 database: %s', $e->getMessage()));
 			return false;
+		}
+
+		if (!empty($this->config['group']) && ! \OC_Group::groupExists($this->config['group'])) {
+			\OC_Group::createGroup($this->config['group']);
 		}
 
 		$this->connected = true;
@@ -122,6 +127,7 @@ class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
 			if (OCA\user_phpbb3\lib\Helper::phpbb_check_hash($password, $user['hash'])) {
 				OC_Preferences::setValue($uid, 'settings', 'email', $user['email']);
 				$this->logInfo("User '$uid' passed password check.");
+				$this->updateUserData($user['uid']);
 				return $user['uid'];
 			} else {
 				$this->logInfo("Couldn't verify user '$uid' password against phpbb3 backend.");
@@ -131,6 +137,52 @@ class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
 		}
 
 		return false;
+	}
+
+	private function updateUserData($uid) {
+		if (!empty($this->config['group']) && !\OC_Group::inGroup($uid, $this->config['group'])) {
+			$this->logInfo("Adding user to group " . $this->config['group']);
+			\OC_Group::addToGroup($uid, $this->config['group']);
+		}
+
+		try {
+			$avatar = new \OC_Avatar($uid);
+			if (!$avatar->get() && $avatar_data = $this->getRemoteAvatar($uid)) {
+				$avatar_size = strlen($avatar_data);
+				$this->logInfo("Setting initial avatar for user $uid - retreived image of ${avatar_size} bytes.");
+				$avatar->set($avatar_data);
+			}
+		} catch (Exception $e) {
+			$this->logError(
+				sprintf("Failed to import phpbb3 avatar: %s: %s", get_class($e), $e->getMessage())
+			);
+		}
+	}
+
+	private function getRemoteAvatar($uid) {
+			$users_table  = $this->normalizeTableName('users');
+			$config_table = $this->normalizeTableName('config');
+
+			$result = $this->query("
+				SELECT CONCAT(
+				    proto.config_value,
+				    host.config_value,
+				    ':',
+				    port.config_value,
+				    path.config_value,
+				    '/download/file.php?avatar=',
+				    u.user_avatar
+				  ) AS avatar_url
+				  FROM $users_table AS u
+				  LEFT JOIN $config_table AS proto ON proto.config_name = 'server_protocol'
+				  LEFT JOIN $config_table AS host ON host.config_name = 'server_name'
+				  LEFT JOIN $config_table AS port ON port.config_name = 'server_port'
+				  LEFT JOIN $config_table AS path ON path.config_name = 'script_path'
+				  WHERE u.username = ?;
+			", array($uid));
+
+			if (count($result) != 1) return NULL;
+			return @file_get_contents($result[0]['avatar_url']);
 	}
 
 	/**
@@ -203,8 +255,9 @@ class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
 	* compared with OC_USER_BACKEND_CREATE_USER etc.
 	*/
 	public function implementsActions($actions) {
-		return (bool)((OC_USER_BACKEND_CHECK_PASSWORD
-			| OC_USER_BACKEND_COUNT_USERS)
-			& $actions);
+		return (bool) (
+			(OC_USER_BACKEND_CHECK_PASSWORD | OC_USER_BACKEND_COUNT_USERS) &
+			$actions
+		);
 	}
 }
