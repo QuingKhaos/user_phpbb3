@@ -6,6 +6,9 @@
  * @author Patrik Karisch
  * @copyright 2012 Patrik Karisch <patrik.karisch@abimus.com>
  *
+ * @author Carl P. Corliss
+ * @copyright 2014 Carl P. Corliss <rabbitt@gmail.com
+ *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU AFFERO GENERAL PUBLIC LICENSE
  * License as published by the Free Software Foundation; either
@@ -21,51 +24,89 @@
  *
  */
 
-class OC_User_phpbb3 extends OC_User_Backend {
-	protected $phpbb3_db_host;
-	protected $phpbb3_db_name;
-	protected $phpbb3_db_user;
-	protected $phpbb3_db_password;
-	protected $phpbb3_db_prefix;
-	protected $db;
-	protected $db_conn;
+use OCA\user_phpbb3\lib\Helpers;
+
+class OC_User_Phpbb3 extends OC_User_Backend implements \OCP\UserInterface {
+
+	private $config;
+	private $connected;
+	private $db;
 
 	function __construct() {
-		$this->db_conn = false;
-		$this->phpbb3_db_host = OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_host','');
-		$this->phpbb3_db_name = OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_name','');
-		$this->phpbb3_db_user = OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_user','');
-		$this->phpbb3_db_password = OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_password','');
-		$this->phpbb3_db_prefix = OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_prefix','');
+		$this->connected = false;
+		$this->config = array(
+			'host'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_host',      'localhost'),
+			'name'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_name',      'phpbb3'),
+			'user'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_user',      ''),
+			'pass'   => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_pass',      ''),
+			'prefix' => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_db_prefix',    'phpbb3_'),
+			'group'  => OC_Appconfig::getValue('user_phpbb3', 'phpbb3_assign_group', 'phpbb3'),
+		);
 
-		$errorlevel = error_reporting();
-		error_reporting($errorlevel & ~E_WARNING);
-		$this->db = new mysqli($this->phpbb3_db_host, $this->phpbb3_db_user, $this->phpbb3_db_password, $this->phpbb3_db_name);
-		error_reporting($errorlevel);
-		if ($this->db->connect_errno) {
-			OC_Log::write('OC_User_phpbb3',
-					'OC_User_phpbb3, Failed to connect to phpbb3 database: ' . $this->db->connect_error,
-					OC_Log::ERROR);
+		try {
+			$this->db = new PDO(
+				sprintf("mysql:host=%s;dbname=%s;", $this->config['host'], $this->config['name']),
+				$this->config['user'], $this->config['pass']
+			);
+		} catch (PDOException $e) {
+			$this->logError(sprintf('Failed to connect to phpbb3 database: %s', $e->getMessage()));
 			return false;
 		}
-		$this->db_conn = true;
-		$this->phpbb3_db_prefix = $this->db->real_escape_string($this->phpbb3_db_prefix);
+
+		if (!empty($this->config['group']) && ! \OC_Group::groupExists($this->config['group'])) {
+			\OC_Group::createGroup($this->config['group']);
+		}
+
+		$this->connected = true;
 	}
 
 	/**
-	 * @brief Set email address
-	 * @param $uid The username
+	 * Log a message with log level ERROR to the owncloud log
+	 * @param $message the message to log
 	 */
-	private function setEmail($uid) {
-		if (!$this->db_conn) {
-			return false;
-		}
+	private function logError($message) {
+		\OCP\Util::writeLog('user_phpbb3', $message, \OCP\Util::ERROR);
+	}
 
-		$q = 'SELECT user_email FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'" AND user_type = 0 OR user_type = 3';
-		$result = $this->db->query($q);
-		$email = $result->fetch_assoc();
-		$email = $email['user_email'];
-		OC_Preferences::setValue($uid, 'settings', 'email', $email);
+	/**
+	 * Log a message with log level INFO to the owncloud log
+	 * @param $message the message to log
+	 */
+	private function logInfo($message) {
+		\OCP\Util::writeLog('user_phpbb3', $message, \OCP\Util::INFO);
+	}
+
+	/**
+	 * Log a message with log level DEBUG to the owncloud log
+	 * @param $message the message to log
+	 */
+	private function logDebug($message) {
+		\OCP\Util::writeLog('user_phpbb3', $message, \OCP\Util::DEBUG);
+	}
+
+	/**
+	 * Return normalized (prefixed) tablename
+	 * @param $table The tablename to normalize
+	 */
+	private function normalizeTableName($table) {
+		if (!$this->connected) { return null; }
+		if ($this->config['prefix']) {
+			return $this->db->real_escape_string(sprintf("%s_%s", $this->config['prefix'], $table));
+		} else {
+			return $table;
+		}
+	}
+
+	/**
+	 * Executes a query against the database, returning the results
+	 * @param $query The query to perform
+	 * @param $bindings Bindings, if any, to pass to execute
+	 */
+	private function query($query, $bindings = array()) {
+		if (!$this->connected) { return array(); }
+		$stmt = $this->db->prepare($query);
+		$stmt->execute($bindings);
+		return $stmt->fetchAll(PDO::FETCH_ASSOC);
 	}
 
 	/**
@@ -75,20 +116,73 @@ class OC_User_phpbb3 extends OC_User_Backend {
 	 * @returns true/false
 	 */
 	public function checkPassword($uid, $password){
-		if (!$this->db_conn) {
-			return false;
+		$result = $this->query("
+			SELECT username AS uid, user_email AS email, user_password AS hash
+			  FROM {$this->normalizeTableName('users')}
+			 WHERE username = ? AND user_type IN (0, 3)
+			", array($uid));
+
+		if (count($result) == 1) {
+			$user = array_shift($result);
+			if (OCA\user_phpbb3\lib\Helper::phpbb_check_hash($password, $user['hash'])) {
+				OC_Preferences::setValue($uid, 'settings', 'email', $user['email']);
+				$this->logInfo("User '$uid' passed password check.");
+				$this->updateUserData($user['uid']);
+				return $user['uid'];
+			} else {
+				$this->logInfo("Couldn't verify user '$uid' password against phpbb3 backend.");
+			}
+		} else {
+			$this->logInfo("Couldn't find user '$uid' in the phpbb3 backend.");
 		}
 
-		$query = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "' . $this->db->real_escape_string($uid) . '"';
-		$query .= ' AND user_password = "' . md5($this->db->real_escape_string($password)) . '" AND user_type = 0 OR user_type = 3';
-		$result = $this->db->query($query);
-		$row = $result->fetch_assoc();
-
-		if ($row) {
-			$this->setEmail($uid);
-			return $row['username'];
-		}
 		return false;
+	}
+
+	private function updateUserData($uid) {
+		if (!empty($this->config['group']) && !\OC_Group::inGroup($uid, $this->config['group'])) {
+			$this->logInfo("Adding user to group " . $this->config['group']);
+			\OC_Group::addToGroup($uid, $this->config['group']);
+		}
+
+		try {
+			$avatar = new \OC_Avatar($uid);
+			if (!$avatar->get() && $avatar_data = $this->getRemoteAvatar($uid)) {
+				$avatar_size = strlen($avatar_data);
+				$this->logInfo("Setting initial avatar for user $uid - retreived image of ${avatar_size} bytes.");
+				$avatar->set($avatar_data);
+			}
+		} catch (Exception $e) {
+			$this->logError(
+				sprintf("Failed to import phpbb3 avatar: %s: %s", get_class($e), $e->getMessage())
+			);
+		}
+	}
+
+	private function getRemoteAvatar($uid) {
+			$users_table  = $this->normalizeTableName('users');
+			$config_table = $this->normalizeTableName('config');
+
+			$result = $this->query("
+				SELECT CONCAT(
+				    proto.config_value,
+				    host.config_value,
+				    ':',
+				    port.config_value,
+				    path.config_value,
+				    '/download/file.php?avatar=',
+				    u.user_avatar
+				  ) AS avatar_url
+				  FROM $users_table AS u
+				  LEFT JOIN $config_table AS proto ON proto.config_name = 'server_protocol'
+				  LEFT JOIN $config_table AS host ON host.config_name = 'server_name'
+				  LEFT JOIN $config_table AS port ON port.config_name = 'server_port'
+				  LEFT JOIN $config_table AS path ON path.config_name = 'script_path'
+				  WHERE u.username = ?;
+			", array($uid));
+
+			if (count($result) != 1) return NULL;
+			return @file_get_contents($result[0]['avatar_url']);
 	}
 
 	/**
@@ -97,19 +191,15 @@ class OC_User_phpbb3 extends OC_User_Backend {
 	 *
 	 * Get a list of all users
 	 */
-	public function getUsers() {
-		$users = array();
-		if (!$this->db_conn) {
-			return $users;
-		}
+	public function getUsers($search = '', $limit = 10, $offset = 0) {
+		$result = $this->query("
+			SELECT username
+			  FROM {$this->normalizeTableName('users')}
+			 WHERE user_type IN (0, 3)
+			");
 
-		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE user_type = 0 OR user_type = 3';
-		$result = $this->db->query($q);
-		while ($row = $result->fetch_assoc()) {
-			if(!empty($row['username'])) {
-				$users[] = $row['username'];
-			}
-		}
+		$users = array();
+		array_walk_recursive($result, function($u) use(&$users) { $users[] = $u; });
 		sort($users);
 		return $users;
 	}
@@ -120,12 +210,54 @@ class OC_User_phpbb3 extends OC_User_Backend {
 	 * @return boolean
 	 */
 	public function userExists($uid) {
-		if (!$this->db_conn) {
-			return false;
-		}
+		$result = $this->query("
+			SELECT username
+			  FROM {$this->normalizeTableName('users')}
+			 WHERE username = ? AND user_type IN (0, 3)
+			", array($uid));
 
-		$q = 'SELECT username FROM '. $this->phpbb3_db_prefix .'users WHERE username = "'. $this->db->real_escape_string($uid) .'"  AND user_type = 0 OR user_type = 3';
-		$result = $this->db->query($q);
-		return $result->num_rows > 0;
+		return count($result) > 0;
+	}
+
+	/**
+	* delete a user
+	* @param string $uid The username of the user to delete
+	* @return bool
+	*
+	* Deletes a user
+	*/
+	public function deleteUser($uid) {
+		return false;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function hasUserListings() {
+		return true;
+	}
+
+	/**
+	 * counts the users in LDAP
+	 *
+	 * @return int|bool
+	 */
+	public function countUsers() {
+		return count($this->getUsers());
+	}
+
+	/**
+	* Check if backend implements actions
+	* @param int $actions bitwise-or'ed actions
+	* @return boolean
+	*
+	* Returns the supported actions as int to be
+	* compared with OC_USER_BACKEND_CREATE_USER etc.
+	*/
+	public function implementsActions($actions) {
+		return (bool) (
+			(OC_USER_BACKEND_CHECK_PASSWORD | OC_USER_BACKEND_COUNT_USERS) &
+			$actions
+		);
 	}
 }
