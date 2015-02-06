@@ -3,7 +3,7 @@
     <id>user_phpbb3</id>
     <name>phpBB3 user backend</name>
     <description>Authenticate users using phpBB3 Database</description>
-    <version>0.1</version>
+    <version>0.2</version>
     <licence>AGPL</licence>
     <author>Patrik Karisch &lt;patrik.karisch@abimus.com&gt;</author>
     <require>4</require>
